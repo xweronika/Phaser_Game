@@ -1,0 +1,388 @@
+<html>
+
+<head>
+    <title>Beat Your Bacon</title>
+</head>
+
+<body>
+
+    <div id="game"></div>
+    <script src="http://cdn.jsdelivr.net/npm/phaser-ce@2.11.1">
+    </script>
+    <script>
+        const game = new Phaser.Game(1000, 720, Phaser.CANVAS, 'game', {
+            preload() {
+                // Wczytanie obrazów obiektów
+				game.load.audio('theme', 'assets/theme.mp3')
+                game.load.image('platform', 'assets/platform.png')
+                game.load.image('wallL', 'assets/SideWallLeft.png')
+                game.load.image('wallR', 'assets/SideWallRight.png')
+                game.load.spritesheet('player', 'assets/ultimate_burger.png', 64, 64);
+                game.load.spritesheet('enemy', 'assets/ultimate_bekon.png', 28,35)
+                game.load.spritesheet('bekon', 'assets/bekon.png',265,306)
+                game.load.image('bg_paski','assets/bg_paski.png')
+                game.load.image('bg_chmurka', 'assets/bg_chmurka.png')
+                game.load.image('platform2', 'assets/platform_2.png')
+                game.physics.arcade.gravity.y = 2000;
+            },
+
+            create() {
+                
+                this.gameHeight = 720;
+                game.world.height = this.gameHeight
+                game.world.setBounds(0, 0, 1000, 720)
+                this.score = 0;
+                this.passedPlatforms = 0;
+                this.createdPlatforms = 0;
+                this.platformUsed = true
+                this.backgroundY = 720;
+                this.isSuperJump = false;
+                this.platformHeight = 510
+				this.music = game.add.audio('theme')
+				this.music.play()
+                //obsługa tła
+                game.stage.backgroundColor = "#D3D3D3";
+                this.bgPaski = game.add.sprite(0, 0, 'bg_paski')
+                this.bgPaski.alpha = 1.5
+                this.backgrounds = game.add.group();
+                this.backgrounds.add(this.bgPaski)
+                this.bejkon = game.add.sprite(game.world.centerX-132.5, game.world.centerY-153, 'bekon')
+                this.bejkon.animations.add('dancing', [0,1], 5, false)
+                this.bgChmurka = game.add.sprite(0, 0,'bg_chmurka')
+                this.bgChmurka.fixedToCamera = true
+                this.bejkon.fixedToCamera = true
+                this.bejkon.alpha = 0.4
+                this.bgChmurka.alpha = 0.8
+                this.bejkon.scale.x = 1.5
+                this.bejkon.scale.y = 1.5
+               // game.time.events.loop(Phaser.Timer.SECOND*2, this.moveBekon, this)
+
+                
+                //dodanie gracza
+                this.player = game.add.sprite(game.world.centerX, 650, 'player');
+
+                //dodanie ścian bocznych
+                this.leftWall = game.add.sprite(game.world.LEFT, 0, 'wallL')
+                this.rightWall = game.add.sprite(game.world.width - 32, 0, 'wallR')
+
+                this.player.maxHeight = this.platformHeight
+                this.maxScore = 0;
+                this.cameraAcc = 1
+
+                //ustawienie wysokości świata
+                let minheight = -99999
+                let height = -minheight + game.world.height
+                game.world.setBounds(0, minheight, 1000, height)
+
+                //włączenie fizyki typu arcade dla gracza
+                game.physics.arcade.enable(this.player);
+                this.player.anchor.setTo(.5, .5);
+                this.player.jumpTimer = 0;
+
+                //tworzenie grupy platform, grup chodzących bekonów i grupy ścian bocznych
+                this.platforms = game.add.physicsGroup();
+                this.enemies = game.add.physicsGroup();
+                this.bounds = game.add.physicsGroup();
+                this.enemiesHeight = this.player.body.y - 200
+
+                //dodanie prawej i lewej granicy świata do jednej grupy
+                this.bounds.add(this.leftWall)
+                this.bounds.add(this.rightWall)
+                for (let i = 0; i < this.bounds.children.length; i++) {
+                    this.bounds.children[i].body.allowGravity = false;
+                    this.bounds.children[i].body.immovable = true;
+                    this.bounds.children[i].fixedToCamera = true;
+
+                }
+
+                //dodanie bekonów do jednej grupy
+                for (let i = 0; i < this.enemies.children.length; i++) {
+                    this.enemies.children[i].body.allowGravity = true;
+                    this.enemies.children[i].body.immovable = false;
+                }
+
+                //Dodanie tekstu, informującego o punktach 
+                this.scoreText = this.add.text(50, 16, 'Score: 0', {
+                    fontSize: '32px',
+                    fill: '#000'
+                }); 
+                this.scoreText.fixedToCamera = true;
+
+                //Dodanie animacji gracza
+                this.player.animations.add('walking', [1, 0, 1, 2], 5, false);
+                this.player.animations.add('idle', [1], false);
+                this.player.animations.add('leftJump',[4], 2, false)
+                this.player.animations.add('rightJump', [3], 2, false)
+                this.player.animations.add('superJump', [1,5,6,7], 5, true)
+                //Jednorazowe stowrzenie podłogi
+                this.createOne()
+
+                //Stworzenie początkowych platform
+                for (let i = 0; i < 4; i++) {
+                    this.platformSpawn()
+                }
+
+
+            },
+
+            // przesuwanie bekonu w tle
+            moveBekon(){
+                this.bejkon.cameraOffset.x = this.rnd.integerInRange(0, 1000 -this.bejkon.width)
+                this.bejkon.cameraOffset.y = this.rnd.integerInRange(0, 700 - this.bejkon.height) 
+            },
+
+            // funkcja tworząca kolejne platformy i usuwająca zbędne
+            platformSpawn() {
+                this.createdPlatforms++
+                if(this.createdPlatforms == 42){
+                    this.createdPlatforms %= 42
+                    this.platformUsed = !this.platformUsed
+                }
+                let platform = game.add.sprite(this.rnd.integerInRange(35, game.world.width - 291), this.platformHeight, 'platform'+(!this.platformUsed ? '2' : ""));
+                this.platformHeight -= 190
+
+                //dodawanie platform do grupy oraz ustawienie ich parametrów fizycznych
+                this.platforms.add(platform);
+                platform.body.checkCollision.left = false
+                platform.body.checkCollision.right = false
+                platform.body.allowGravity = false;
+                platform.body.immovable = true;
+
+                // usuwanie platform, jeśli jest ich więcej niż 10
+                if (this.platforms.children.length > 10) {
+                    let szift = this.platforms.children.shift()
+                    this.platforms.remove(szift);
+                    szift.destroy()
+                }
+
+                //spawnowanie bekonów, na stworzonych platformach
+                this.enemySpawn(platform)
+
+            },
+
+            //dodawanie i usuwanie bekonów
+            enemySpawn(platforma) {
+                let loopcounter = this.rnd.integerInRange(10, 15)
+                for (let i = 0; i < loopcounter; i++) {
+                    let enemy = game.add.sprite(this.rnd.integerInRange(platforma.body.x+35, platforma.body.x + 150), platforma.body.y - 35, 'enemy');
+                    this.enemies.add(enemy)
+                    this.enemiesHeight -= 190
+                    enemy.platform = platforma
+                    //Dodanie do każdego nowego bekonu animacji chodzenia i śmierci
+                    enemy.animations.add('walkingL',[2,1,2,0], 7, false)
+                    enemy.animations.add('walkingR',[3,4, 3, 5], 7, false)
+                    enemy.animations.add('death', [5,6], 10, false)
+                    enemy.isDead = false
+                    enemy.speed = this.rnd.integerInRange(40, 150)
+                }
+            },
+            //funkcja niszcząca zabite bekony 
+            enemyKill(enemy){
+                this.enemies.remove(enemy);
+                enemy.destroy()
+                enemy.kill();
+			
+            },
+
+            // funkcja spawnująca platformę początkową na dole, ogarz pierwsze platformy
+            createOne() {
+                for (let i = -6; i < this.game.width; i += 256) {
+                    let floor = game.add.sprite(i, this.game.height - 20, 'platform')
+                    this.bounds.add(floor)
+                    floor.body.allowGravity = false;
+                    floor.body.immovable = true;
+                }
+            },
+            //funkcja kopiująca poziome paski tła, aby było ono nieskończenie długie, oraz usuwająca zbędne
+            movePaski(){
+                if(game.camera.y < this.backgroundY+720){
+                    let tempBG = game.add.sprite(0, this.backgroundY, 'bg_paski');
+                    this.backgrounds.add(tempBG)
+                    this.backgroundY -=720;
+                    tempBG.sendToBack();
+                }
+                if(this.backgrounds.children.length > 3){
+                    let szift = this.backgrounds.children.pop()
+                    this.backgrounds.remove(szift);
+                    szift.destroy()
+                }
+            },
+            
+            update() {
+
+                this.bejkon.animations.play('dancing')
+                let hitPlatform = false
+
+                //jeśli gracz wypadnie poniżej okna, gra sięzrestartuje
+                if (this.player.body.y > game.camera.y + 720) {
+		   this.music.stop();
+                   this.game.state.restart();
+                }
+                //Jeśli gracz dotknie bocznej ściany ustawia bounce na 0,6, dzięki temu w przyjemny sposób odbija się on od ścian
+                if (this.player.body.x < 37 || this.player.body.x > 900) {
+                    this.player.body.bounce.set(0.6);
+                //Jeśli gracz nie dotyka ścian, bounce jest ustawiany na 0,0, tak aby nie odbijałsięod platform
+                } else {
+                    this.player.body.bounce.set(0.0)
+                }
+                if (this.player.body.velocity.y > 0) {
+                    hitPlatform = game.physics.arcade.collide(this.player, this.platforms)
+                    game.physics.arcade.overlap(this.enemies, this.player, (player, enemy) => {
+						this.score += 1;
+					   this.scoreText.setText('Bacons: ' + this.score);
+                        enemy.body.checkCollision.up = false
+                        enemy.body.checkCollision.down = false
+                        enemy.isDead = true
+						
+                        let tempThis=this
+                        setTimeout(function(){
+                            tempThis.enemyKill(enemy)
+                        }, 700)
+ 
+                });
+                }
+
+                game.physics.arcade.collide(this.platforms, this.enemies)
+                let hitBounds = game.physics.arcade.collide(this.player, this.bounds)
+
+                //tworzenie zmiennych, tzymających kody klawiszy 
+                var leftKey = game.input.keyboard.addKey(Phaser.Keyboard.LEFT)
+                var rightKey = game.input.keyboard.addKey(Phaser.Keyboard.RIGHT)
+                var jumpKey = game.input.keyboard.addKey(Phaser.Keyboard.SPACEBAR);
+
+                this.player.animations.currentAnim.speed = 20
+                
+                this.movePaski();
+                //movement gracza
+                if (leftKey.isDown) {
+                    if (this.player.body.velocity.x > 0) {
+                        this.player.body.acceleration.x = -3500;
+                        
+
+                    } else {
+                        this.player.body.acceleration.x = -700;
+
+                    }
+                } else if (rightKey.isDown) {
+                    if (this.player.body.velocity.x < 0) {
+                        this.player.body.acceleration.x = 3500;
+
+                    } else {
+                        this.player.body.acceleration.x = 700;
+                    }
+                } else {
+                    let dump = 0.9
+                    this.player.body.acceleration.x = 0
+                    this.player.body.velocity.x *= dump
+                    if (Math.abs(this.player.body.velocity.x) < 0.05) {
+                        this.player.body.velocity.x = 0;
+                        
+                    }
+                }
+
+                //movement enemisów
+                for (let i=this.enemies.children.length -1; i>=0; i--) {
+                    let enemy = this.enemies.children[i]
+                    if(enemy.platform.body==null){ 
+                        enemy.kill();
+                        enemy.destroy();
+						
+                        continue
+                    }
+                    if(enemy.isDead){
+                        enemy.animations.play('death')
+                        enemy.body.velocity.x *= 1.02
+                        continue
+                    }
+                    if ((enemy.body.x < enemy.platform.body.x +5 && !enemy.flip) || (enemy.body.x + 28 > enemy.platform.body.x+enemy.platform.width && enemy.flip)) {
+                        enemy.flip = !enemy.flip;
+                    }
+                    if (enemy.body.blocked.down || enemy.body.touching.down) {
+                        if (enemy.flip) {
+                            enemy.animations.play('walkingR')
+                            enemy.body.velocity.x = enemy.speed
+                        } else {
+                            enemy.animations.play('walkingL')
+                            enemy.body.velocity.x = -enemy.speed
+                        }
+                    }
+                }
+
+                //Obsługa animacji gracza
+                if (this.player.body.velocity.y == 0) {
+                    this.isSuperJump = false;
+                    if(this.player.body.velocity.x == 0){
+                        this.player.animations.play('idle')
+                    }else{
+                        this.player.animations.play('walking');
+                    }
+                    let tempScore = Math.round(-(this.player.body.y - 647) / 19) - 1;
+                    if(this.passedPlatforms < tempScore){
+                        let difference = tempScore - this.passedPlatforms
+                        this.passedPlatforms = tempScore
+                        this.score += Math.round((0.9+difference/100)*difference*10)
+                    }
+                }else if(this.player.body.velocity.x < 0 && !this.isSuperJump ){
+                    this.player.animations.play('leftJump');
+                }else if(this.player.body.velocity.x > 0 && !this.isSuperJump ){
+                    this.player.animations.play('rightJump')
+                }
+
+                //skoki gracza
+                if (jumpKey.isDown && this.player.body.touching.down && (hitPlatform||hitBounds) ) {
+                    if (this.player.body.velocity.x > 700 || this.player.body.velocity.x < -700) {
+                        this.isSuperJump = true;
+                        this.player.animations.play('superJump')
+                        this.player.body.velocity.y = -1900;
+                        this.player.jumpTimer = game.time.now + 750;
+                    } else if (this.player.body.velocity.x > 500 || this.player.body.velocity.x < -500) {
+                        this.player.body.velocity.y = -1400;
+                        this.player.jumpTimer = game.time.now + 750;
+                    } else {
+                        this.player.body.velocity.y = -1000;
+                        this.player.jumpTimer = game.time.now + 750;
+                    }
+                }
+
+                //aktualizowanie ilości i pozycji nowych platform
+                if (this.player.body.y < this.platformHeight + 500) {
+                    for (let i = 0; i < 4; i++) {
+                        this.platformSpawn()
+                    }
+                }
+
+               //zmiana punktów gracza, oraz przyspieczenia kamery
+                this.scoreText.setText('Bacons: ' + this.score);
+                if (this.passedPlatforms > this.maxScore) {
+                    this.cameraAcc = Math.ceil(this.passedPlatforms/420)
+                    this.maxScore = this.passedPlatforms
+                }
+                
+                //stały ruch kamery, oraz podążanie za graczem, jeśli jest za wysoko
+                if (this.player.body.y < 480) {
+                    game.camera.y -= 1 * this.cameraAcc
+                    if (this.player.body.y < (game.camera.y) + 50 && this.player.body.y > -99000) {
+                        game.camera.y = this.player.body.y - 50
+
+                    }
+
+                }
+            },
+        })
+    </script>
+
+</body>
+
+<style> body{
+	margin: 0;
+	padding: 0;
+}
+canvas{
+	margin: 0 auto;
+	}
+</style>
+
+
+
+
+</html>
