@@ -17,6 +17,7 @@
                 game.load.image('platform', 'assets/platform.png')
                 game.load.image('wallL', 'assets/SideWallLeft.png')
                 game.load.image('wallR', 'assets/SideWallRight.png')
+				game.load.image('menu' , 'assets/bg_menu.png')
                 game.load.spritesheet('player', 'assets/ultimate_burger.png', 64, 64);
                 game.load.spritesheet('enemy', 'assets/ultimate_bekon.png', 28,35)
                 game.load.spritesheet('bekon', 'assets/bekon.png',265,306)
@@ -55,6 +56,10 @@
                 this.bgChmurka.alpha = 0.8
                 this.bejkon.scale.x = 1.5
                 this.bejkon.scale.y = 1.5
+				
+				this.bgmenu = game.add.sprite(0,0,'menu')
+				this.bgmenu.fixedToCamera = false
+				this.bgmenu.alpha = 50
                // game.time.events.loop(Phaser.Timer.SECOND*2, this.moveBekon, this)
 
                 
